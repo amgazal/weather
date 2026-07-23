@@ -275,6 +275,29 @@ function scenicByCode(code) {
   return { key, src: BACKGROUNDS[key] };
 }
 
+
+function LoadingScreen() {
+  return (
+    <div
+      className="lyr weather-cloudy loading-screen"
+      style={{ "--accent": "#E0A32E" }}
+    >
+      <style>{css}</style>
+      <div
+        className="scene-image"
+        style={{ backgroundImage: `url(${BACKGROUNDS.cloudy})` }}
+        aria-hidden="true"
+      />
+      <div className="backdrop" />
+      <div className="loading-content" role="status" aria-live="polite">
+        <span className="loading-brand">Layer</span>
+        <RefreshCw className="loading-spinner" size={24} strokeWidth={2.2} />
+        <span>Reading the weather on campus…</span>
+      </div>
+    </div>
+  );
+}
+
 function Onboarding({ onDone }) {
   const [climate, setClimate] = useState(null);
   const [tol, setTol] = useState(null);
@@ -548,15 +571,17 @@ export default function Layer() {
     return () => clearTimeout(id);
   }, [toast]);
 
-  if (ready && !model.seeded) return <Onboarding onDone={seed} />;
+  if (!ready) return <LoadingScreen />;
+  if (!model.seeded) return <Onboarding onDone={seed} />;
+  if (!plan || !result) return <LoadingScreen />;
 
-  const cond = result?.cond;
-  const ConditionIcon = cond?.Icon;
-  const liveWeatherCode = wx?.current?.code ?? plan?.depart.code ?? 3;
+  const cond = result.cond;
+  const ConditionIcon = cond.Icon;
+  const liveWeatherCode = wx?.current?.code ?? plan.depart.code ?? 3;
   const scene = scenicByCode(liveWeatherCode);
   const todayText = plan ? humanDate(plan.depart.time) : humanDate(new Date());
   const timeText = plan ? formatTime(plan.depart.time) : formatTime(new Date());
-  const accent = result?.band.accent || "#E0A32E";
+  const accent = result.band.accent;
   const conf = confidence(model);
   const planningSummary = `${startOffset === 0 ? "Leaving now" : `Leaving ${formatTime(new Date(Date.now() + startOffset * 60 * 60 * 1000))}`} • ${DURATIONS.find((d) => d.minutes === duration)?.label || `${duration} min`} outside${cycling ? " • Cycling" : ""}`;
 
@@ -590,21 +615,21 @@ export default function Layer() {
           <section className="hero">
             <div className="hero-meta">
               <div className="hero-place">{CAMPUS.name}</div>
-              <div className="hero-date">{todayText} <span className="dot" /> {timeText} <span className="dot" /> <span className="cond-inline">{ConditionIcon ? <ConditionIcon size={15} strokeWidth={2.2} /> : null}{cond?.label || "Loading"}</span></div>
+              <div className="hero-date">{todayText} <span className="dot" /> {timeText} <span className="dot" /> <span className="cond-inline">{ConditionIcon ? <ConditionIcon size={15} strokeWidth={2.2} /> : null}{cond.label}</span></div>
             </div>
-            <h1 className="verdict">{result?.band.verdict || "Loading…"}</h1>
-            <p className="sub">{result?.band.sub || "Reading the sky."}</p>
+            <h1 className="verdict">{result.band.verdict}</h1>
+            <p className="sub">{result.band.sub}</p>
             <div className="reads">
               <div className="read">
                 <span className="read-k">Forecast</span>
-                <span className="read-v">{plan?.depart.apparent ?? "--"}°</span>
+                <span className="read-v">{plan.depart.apparent}°</span>
               </div>
               <ArrowRight size={18} strokeWidth={2.4} className="read-arrow" />
               <div className="read read-you">
                 <span className="read-k">For you</span>
-                <span className="read-v">{result?.effective ?? "--"}°</span>
+                <span className="read-v">{result.effective}°</span>
               </div>
-              {result?.personalShift !== 0 && <span className="shift">{result.personalShift > 0 ? "+" : ""}{result.personalShift}° personal</span>}
+              {result.personalShift !== 0 && <span className="shift">{result.personalShift > 0 ? "+" : ""}{result.personalShift}° personal</span>}
             </div>
             <div className="hero-foot">{planningSummary}</div>
           </section>
@@ -1060,6 +1085,40 @@ const css = `
 .ob-opt-n { color:#6A7990; font-size: 13px; }
 .ob-go { border:none; cursor:pointer; background: var(--ink); color:white; border-radius: 18px; padding: 16px 18px; font-weight:700; display:inline-flex; align-items:center; gap: 8px; }
 .ob-go:disabled { opacity: .4; cursor: not-allowed; }
+
+.loading-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.loading-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-radius: 18px;
+  background: rgba(12, 27, 44, .48);
+  border: 1px solid rgba(255, 255, 255, .18);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .2);
+  backdrop-filter: blur(14px);
+  color: rgba(255, 255, 255, .92);
+  font-weight: 600;
+}
+.loading-brand {
+  font-family: 'Outfit', sans-serif;
+  color: #F6C35C;
+  font-weight: 800;
+}
+.loading-spinner {
+  animation: loadingSpin .9s linear infinite;
+}
+@keyframes loadingSpin {
+  to { transform: rotate(360deg); }
+}
+
 @media (max-width: 980px) {
   .content-grid { grid-template-columns: 1fr; }
   .compact-planner { position: static; order: 2; }
