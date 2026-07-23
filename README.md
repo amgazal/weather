@@ -30,3 +30,16 @@ Push the complete project to the `main` branch. The included GitHub Actions work
 ## White-screen fix
 
 This version adds explicit loading guards before rendering weather-dependent values. It prevents the initial React render from reading `result.personalShift` before the weather calculation exists.
+
+
+## Mobile-first hierarchy
+
+On screens below 980px, the interface now renders in this order:
+
+1. Live weather summary and personalized temperature
+2. Clothing recommendation
+3. Activity selection
+4. Future-outing planner
+5. Comfort threats, feedback, and calibration
+
+This prevents the clothing/activity cards from appearing above the main weather information on phones.

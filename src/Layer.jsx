@@ -634,7 +634,7 @@ export default function Layer() {
             <div className="hero-foot">{planningSummary}</div>
           </section>
 
-          <aside className="planner glass card compact-planner">
+          <aside className="planner glass card compact-planner planner-card">
             <div className="planner-head">
               <h2>Plan another outing</h2>
               <button className="link-btn" onClick={() => setPlanOpen((v) => !v)}>
@@ -706,7 +706,7 @@ export default function Layer() {
             )}
           </section>
 
-          <section className="card glass main-card">
+          <section className="card glass main-card activity-card">
             <div className="card-head inline-head">
               <h2 className="card-h">What’s the plan?</h2>
               <button className="plan-link" onClick={() => setPlanOpen((v) => !v)}>
@@ -727,7 +727,7 @@ export default function Layer() {
             </div>
           </section>
 
-          <section className="card glass main-card">
+          <section className="card glass main-card threat-card">
             <div className="card-head">
               <h2 className="card-h">Comfort threats</h2>
               <div className="scale">{LEVELS.map((l) => <span key={l}>{l}</span>)}</div>
@@ -745,7 +745,7 @@ export default function Layer() {
             </div>
           </section>
 
-          <section className="card glass main-card">
+          <section className="card glass main-card feedback-card">
             <h2 className="card-h">How did it feel out there?</h2>
             <div className="follow-line">
               <span className="follow-q">Did you follow the recommendation?</span>
@@ -780,7 +780,7 @@ export default function Layer() {
             {toast && <div className="toast">{toast}</div>}
           </section>
 
-          <section className="card glass main-card">
+          <section className="card glass main-card calibration-card">
             <div className="card-head">
               <h2 className="card-h">Your calibration</h2>
               <span className="conf">{conf}% confident</span>
@@ -1121,8 +1121,13 @@ const css = `
 
 @media (max-width: 980px) {
   .content-grid { grid-template-columns: 1fr; }
-  .compact-planner { position: static; order: 2; }
   .hero { order: 1; padding-right: 0; }
+  .wear-card { order: 2; }
+  .activity-card { order: 3; }
+  .compact-planner { position: static; order: 4; }
+  .threat-card { order: 5; }
+  .feedback-card { order: 6; }
+  .calibration-card { order: 7; }
   .main-card { grid-column: auto; }
 }
 @media (max-width: 740px) {
@@ -1130,13 +1135,21 @@ const css = `
   .weather-cloudy .scene-image { background-position: 51% 56%; }
   .weather-rain .scene-image { background-position: 50% 59%; }
   .weather-snow .scene-image { background-position: 54% 56%; }
-  .app-shell { width: min(100vw - 18px, 100%); padding-top: 18px; }
-  .topbar { margin-bottom: 10px; }
+  .app-shell { width: min(100vw - 18px, 100%); padding-top: 14px; }
+  .content-grid { gap: 14px; }
+  .topbar { margin-bottom: 0; }
+  .hero { padding: 18px 10px 14px; }
+  .hero-place { font-size: 18px; margin-bottom: 7px; }
+  .hero-date { font-size: 13px; gap: 7px; }
   .campus-line small { display:none; }
-  .verdict { font-size: 54px; }
-  .sub { font-size: 22px; margin-bottom: 22px; }
-  .reads { gap: 12px; }
-  .read-v { font-size: 52px; }
+  .verdict { font-size: 48px; margin-top: 14px; margin-bottom: 8px; }
+  .sub { font-size: 20px; margin-bottom: 18px; }
+  .reads { gap: 10px; }
+  .read-k { font-size: 11px; }
+  .read-v { font-size: 48px; }
+  .read-arrow { margin-bottom: 11px; }
+  .shift { margin-left: 0; margin-bottom: 8px; padding: 9px 12px; }
+  .hero-foot { margin-top: 12px; font-size: 13px; }
   .card { border-radius: 24px; padding: 18px; }
   .tipbar { margin-left: -18px; margin-right: -18px; margin-bottom: -18px; }
   .wear-name, .th-l { font-size: 18px; }
