@@ -7,10 +7,10 @@ import {
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════
-   LAYER v4 — weather you can wear.
+   LAYER v4.1 — weather you can wear.
 
    Campus-focused personal comfort engine:
-   · Plans for an outing window, not a single current reading
+   · Keeps the main forecast simple while planning outings underneath
    · Learns only from feedback the user actually followed
    · Treats cycling as temporary exposure, not a permanent preference
    · Matches recommendations to a manually built closet
@@ -18,8 +18,8 @@ import {
    ═══════════════════════════════════════════════════════════════════ */
 
 const CAMPUS = {
-  name: "Cornell University",
-  subtitle: "Ithaca campus",
+  name: "Ithaca, NY",
+  subtitle: "Cornell campus",
   lat: 42.4534,
   lon: -76.4735,
 };
@@ -523,7 +523,9 @@ export default function Layer() {
   const [feedback, setFeedback] = useState(null);
   const [toast, setToast] = useState(null);
   const [showModel, setShowModel] = useState(false);
+  const [showPlanner, setShowPlanner] = useState(false);
   const [showCloset, setShowCloset] = useState(false);
+  const [clock, setClock] = useState(() => new Date());
   const [newItem, setNewItem] = useState(EMPTY_ITEM);
   const [demo, setDemo] = useState(false);
   const [demoTemp, setDemoTemp] = useState(42);
@@ -532,6 +534,11 @@ export default function Layer() {
   const mounted = useRef(true);
 
   useEffect(() => () => { mounted.current = false; }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(new Date()), 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -773,7 +780,6 @@ export default function Layer() {
           <div className="loc">
             <MapPin size={13} strokeWidth={2.4} />
             <span>{CAMPUS.name}</span>
-            <span className="campus-sub">{CAMPUS.subtitle}</span>
           </div>
           <div className="top-r">
             {wxState === "offline" && <span className="pill">sample data</span>}
@@ -789,8 +795,95 @@ export default function Layer() {
           <div className="loading">Reading the campus forecast…</div>
         ) : (
           <>
+            <section className="hero">
+              <div className="hero-meta">
+                <span>{today} · {formatTime(clock)}</span><span className="dot" />
+                <span className="cond">
+                  {(() => { const Icon = result.cond.Icon; return <Icon size={14} strokeWidth={2.2} />; })()}
+                  {result.cond.label}
+                </span>
+              </div>
+              <h1 className="verdict">{result.band.verdict}</h1>
+              <p className="sub">{result.band.sub}</p>
+              <div className="reads">
+                <div className="read">
+                  <span className="read-k">Forecast</span>
+                  <span className="read-v">{result.start.apparent}°</span>
+                </div>
+                <ArrowRight size={15} strokeWidth={2.4} className="read-arrow" />
+                <div className="read read-you">
+                  <span className="read-k">For you</span>
+                  <span className="read-v">{result.effective}°</span>
+                </div>
+                {result.personalShift !== 0 && (
+                  <span className="shift">{result.personalShift > 0 ? "+" : ""}{result.personalShift}° personal</span>
+                )}
+              </div>
+            </section>
+
+            {result.warnings.length > 0 && (
+              <div className="alerts">
+                {result.warnings.map((warning, index) => {
+                  const Icon = warning.Icon;
+                  return <div className="alert" key={`${warning.text}-${index}`}><Icon size={15} strokeWidth={2.3} /><span>{warning.text}</span></div>;
+                })}
+              </div>
+            )}
+
             <section className="card">
-              <h2 className="card-h">Plan this campus outing</h2>
+              <h2 className="card-h">Wear this</h2>
+              <ul className="layers">
+                {result.band.layers.map((layer, index) => (
+                  <li key={layer.label} className="lyr-row">
+                    <span className="lyr-n">{index + 1}</span>
+                    <span className="lyr-txt">
+                      <span className="lyr-name">{layer.label}</span>
+                      {layer.note && <span className="lyr-note">{layer.note}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {result.extras.length > 0 && (
+                <div className="extras">
+                  {result.extras.map((extra) => {
+                    const Icon = extra.Icon;
+                    return <div key={extra.text} className="extra"><Icon size={15} strokeWidth={2.2} /><span>{extra.text}</span></div>;
+                  })}
+                </div>
+              )}
+            </section>
+
+            <section className="card">
+              <h2 className="card-h">What is the plan?</h2>
+              <div className="acts">
+                {Object.entries(ACTIVITIES).map(([key, item]) => {
+                  const Icon = item.Icon;
+                  return (
+                    <button key={key} className={`act ${activity === key ? "on" : ""}`} onClick={() => setActivity(key)}>
+                      <Icon size={17} strokeWidth={2.2} />
+                      <span className="act-l">{item.label}</span>
+                      <span className="act-h">{item.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="planner-wrap">
+              <button className="planner-toggle" onClick={() => setShowPlanner((value) => !value)}>
+                <span className="planner-toggle-main">
+                  <Clock3 size={15} strokeWidth={2.3} />
+                  <span>
+                    <span className="planner-toggle-title">Plan another outing</span>
+                    <span className="planner-toggle-sub">
+                      {startOffset === 0 ? "Leaving now" : `Leaving in ${startOffset} hour${startOffset === 1 ? "" : "s"}`} · {durationMinutes < 60 ? `${durationMinutes} min` : durationMinutes === 60 ? "1 hour" : `${durationMinutes / 60} hours`}
+                    </span>
+                  </span>
+                </span>
+                <ChevronDown size={15} strokeWidth={2.5} className={showPlanner ? "open" : ""} />
+              </button>
+              {showPlanner && (
+                <div className="card planner-card">
               <div className="outing-grid">
                 <div>
                   <span className="field-label">Leaving</span>
@@ -832,156 +925,8 @@ export default function Layer() {
                 <span><strong>{formatTime(result.windowStartAt)}–{formatTime(result.windowEndAt)}</strong> · {durationMinutes} min outside</span>
                 <span className="range-pill">Feels {result.low}°–{result.high}°</span>
               </div>
-            </section>
-
-            <section className="hero">
-              <div className="hero-meta">
-                <span>{today}</span><span className="dot" />
-                <span className="cond">
-                  {(() => { const Icon = result.cond.Icon; return <Icon size={14} strokeWidth={2.2} />; })()}
-                  {result.cond.label}
-                </span>
-              </div>
-              <h1 className="verdict">{result.band.verdict}</h1>
-              <p className="sub">{result.band.sub}</p>
-              <div className="reads">
-                <div className="read">
-                  <span className="read-k">At departure</span>
-                  <span className="read-v">{result.start.apparent}°</span>
-                </div>
-                <ArrowRight size={15} strokeWidth={2.4} className="read-arrow" />
-                <div className="read read-you">
-                  <span className="read-k">Dress for</span>
-                  <span className="read-v">{result.effective}°</span>
-                </div>
-                {result.personalShift !== 0 && (
-                  <span className="shift">{result.personalShift > 0 ? "+" : ""}{result.personalShift}° outing shift</span>
-                )}
-                <div className="read-note">The recommendation uses the full outing window, your calibration, activity, and temporary trip conditions.</div>
-              </div>
-            </section>
-
-            {result.warnings.length > 0 && (
-              <div className="alerts">
-                {result.warnings.map((warning, index) => {
-                  const Icon = warning.Icon;
-                  return <div className="alert" key={`${warning.text}-${index}`}><Icon size={15} strokeWidth={2.3} /><span>{warning.text}</span></div>;
-                })}
-              </div>
-            )}
-
-            <section className="card">
-              <h2 className="card-h">Wear this</h2>
-              <ul className="layers">
-                {result.band.layers.map((layer, index) => (
-                  <li key={layer.label} className="lyr-row">
-                    <span className="lyr-n">{index + 1}</span>
-                    <span className="lyr-txt">
-                      <span className="lyr-name">{layer.label}</span>
-                      {layer.note && <span className="lyr-note">{layer.note}</span>}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {result.extras.length > 0 && (
-                <div className="extras">
-                  {result.extras.map((extra) => {
-                    const Icon = extra.Icon;
-                    return <div key={extra.text} className="extra"><Icon size={15} strokeWidth={2.2} /><span>{extra.text}</span></div>;
-                  })}
                 </div>
               )}
-            </section>
-
-            <section className="card">
-              <div className="closet-head">
-                <h2 className="card-h">From your closet</h2>
-                <span className="beta">matching beta</span>
-              </div>
-              {closetRecommendation.length ? (
-                <div className="closet-rec">
-                  {closetRecommendation.map((item) => (
-                    <div className="closet-rec-row" key={item.id}>
-                      <span className="closet-rec-main">
-                        <Shirt size={15} strokeWidth={2.2} />
-                        <span>
-                          <span className="closet-rec-name">{item.name}</span>
-                          <span className="closet-rec-cat">{categoryLabel(item.category)} · warmth {item.warmth}/5</span>
-                        </span>
-                      </span>
-                      <span className="trait-row">
-                        {item.windproof && <span className="trait">wind</span>}
-                        {item.waterproof && <span className="trait">water</span>}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="closet-empty">Add a few real items first. Layer will then choose from what you actually own instead of giving only generic clothing categories.</p>
-              )}
-              <button className="manage-btn" onClick={() => setShowCloset((value) => !value)}>
-                <ChevronDown size={14} strokeWidth={2.6} className={showCloset ? "open" : ""} />
-                {showCloset ? "Close closet" : closet.length ? "Manage closet" : "Build my closet"}
-              </button>
-              {showCloset && (
-                <div className="closet-panel">
-                  {closet.length > 0 && (
-                    <div className="closet-list">
-                      {closet.map((item) => (
-                        <div className="closet-item" key={item.id}>
-                          <div className="closet-item-copy">
-                            <div className="closet-item-name">{item.name}</div>
-                            <div className="closet-item-meta">{categoryLabel(item.category)} · warmth {item.warmth}/5{item.windproof ? " · windproof" : ""}{item.waterproof ? " · waterproof" : ""}</div>
-                          </div>
-                          <button className="delete-btn" onClick={() => removeClosetItem(item.id)} aria-label={`Remove ${item.name}`}>
-                            <Trash2 size={14} strokeWidth={2.2} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div className="add-grid">
-                    <input className="text-input" value={newItem.name} placeholder="e.g. black puffer jacket"
-                      onChange={(event) => setNewItem({ ...newItem, name: event.target.value })} />
-                    <select className="select-input" value={newItem.category}
-                      onChange={(event) => setNewItem({ ...newItem, category: event.target.value })}>
-                      {CATEGORY_OPTIONS.map((category) => <option value={category.key} key={category.key}>{category.label}</option>)}
-                    </select>
-                    <div className="warmth-wrap">
-                      <span className="field-label" style={{ margin: 0 }}>Warmth</span>
-                      <input type="range" min="1" max="5" value={newItem.warmth}
-                        onChange={(event) => setNewItem({ ...newItem, warmth: Number(event.target.value) })} />
-                      <span className="warmth-value">{newItem.warmth}/5</span>
-                    </div>
-                    <div className="check-row">
-                      <button className={`check-chip ${newItem.windproof ? "on" : ""}`}
-                        onClick={() => setNewItem({ ...newItem, windproof: !newItem.windproof })}>Windproof</button>
-                      <button className={`check-chip ${newItem.waterproof ? "on" : ""}`}
-                        onClick={() => setNewItem({ ...newItem, waterproof: !newItem.waterproof })}>Waterproof</button>
-                    </div>
-                    <button className="add-btn" disabled={!newItem.name.trim()} onClick={addClosetItem}>
-                      <Plus size={14} strokeWidth={2.5} /> Add item
-                    </button>
-                  </div>
-                  <p className="closet-note">Scanning should eventually automate this catalog step. Keeping entry manual for now lets you test whether the outfit-matching logic is useful before adding computer vision.</p>
-                </div>
-              )}
-            </section>
-
-            <section className="card">
-              <h2 className="card-h">What is the plan?</h2>
-              <div className="acts">
-                {Object.entries(ACTIVITIES).map(([key, item]) => {
-                  const Icon = item.Icon;
-                  return (
-                    <button key={key} className={`act ${activity === key ? "on" : ""}`} onClick={() => setActivity(key)}>
-                      <Icon size={17} strokeWidth={2.2} />
-                      <span className="act-l">{item.label}</span>
-                      <span className="act-h">{item.hint}</span>
-                    </button>
-                  );
-                })}
-              </div>
             </section>
 
             <section className="card">
@@ -1056,6 +1001,81 @@ export default function Layer() {
                       Not sure — it was just off overall
                     </button>
                   </div>
+                </div>
+              )}
+            </section>
+
+            <section className="card">
+              <div className="closet-head">
+                <h2 className="card-h">Your closet</h2>
+                <span className="beta">matching beta</span>
+              </div>
+              {closetRecommendation.length ? (
+                <div className="closet-rec">
+                  {closetRecommendation.map((item) => (
+                    <div className="closet-rec-row" key={item.id}>
+                      <span className="closet-rec-main">
+                        <Shirt size={15} strokeWidth={2.2} />
+                        <span>
+                          <span className="closet-rec-name">{item.name}</span>
+                          <span className="closet-rec-cat">{categoryLabel(item.category)} · warmth {item.warmth}/5</span>
+                        </span>
+                      </span>
+                      <span className="trait-row">
+                        {item.windproof && <span className="trait">wind</span>}
+                        {item.waterproof && <span className="trait">water</span>}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="closet-empty">Add a few real items first. Layer will then choose from what you actually own instead of giving only generic clothing categories.</p>
+              )}
+              <button className="manage-btn" onClick={() => setShowCloset((value) => !value)}>
+                <ChevronDown size={14} strokeWidth={2.6} className={showCloset ? "open" : ""} />
+                {showCloset ? "Close closet" : closet.length ? "Manage closet" : "Build my closet"}
+              </button>
+              {showCloset && (
+                <div className="closet-panel">
+                  {closet.length > 0 && (
+                    <div className="closet-list">
+                      {closet.map((item) => (
+                        <div className="closet-item" key={item.id}>
+                          <div className="closet-item-copy">
+                            <div className="closet-item-name">{item.name}</div>
+                            <div className="closet-item-meta">{categoryLabel(item.category)} · warmth {item.warmth}/5{item.windproof ? " · windproof" : ""}{item.waterproof ? " · waterproof" : ""}</div>
+                          </div>
+                          <button className="delete-btn" onClick={() => removeClosetItem(item.id)} aria-label={`Remove ${item.name}`}>
+                            <Trash2 size={14} strokeWidth={2.2} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="add-grid">
+                    <input className="text-input" value={newItem.name} placeholder="e.g. black puffer jacket"
+                      onChange={(event) => setNewItem({ ...newItem, name: event.target.value })} />
+                    <select className="select-input" value={newItem.category}
+                      onChange={(event) => setNewItem({ ...newItem, category: event.target.value })}>
+                      {CATEGORY_OPTIONS.map((category) => <option value={category.key} key={category.key}>{category.label}</option>)}
+                    </select>
+                    <div className="warmth-wrap">
+                      <span className="field-label" style={{ margin: 0 }}>Warmth</span>
+                      <input type="range" min="1" max="5" value={newItem.warmth}
+                        onChange={(event) => setNewItem({ ...newItem, warmth: Number(event.target.value) })} />
+                      <span className="warmth-value">{newItem.warmth}/5</span>
+                    </div>
+                    <div className="check-row">
+                      <button className={`check-chip ${newItem.windproof ? "on" : ""}`}
+                        onClick={() => setNewItem({ ...newItem, windproof: !newItem.windproof })}>Windproof</button>
+                      <button className={`check-chip ${newItem.waterproof ? "on" : ""}`}
+                        onClick={() => setNewItem({ ...newItem, waterproof: !newItem.waterproof })}>Waterproof</button>
+                    </div>
+                    <button className="add-btn" disabled={!newItem.name.trim()} onClick={addClosetItem}>
+                      <Plus size={14} strokeWidth={2.5} /> Add item
+                    </button>
+                  </div>
+                  <p className="closet-note">Scanning should eventually automate this catalog step. Keeping entry manual for now lets you test whether the outfit-matching logic is useful before adding computer vision.</p>
                 </div>
               )}
             </section>
@@ -1210,7 +1230,7 @@ const css = `
 }
 .app{width:100%; max-width:420px;}
 
-.top{display:flex; align-items:center; justify-content:space-between; margin-bottom:26px;}
+.top{display:flex; align-items:center; justify-content:space-between; margin-bottom:28px;}
 .loc{display:flex; align-items:center; gap:6px; font-size:13.5px; font-weight:600;}
 .loc svg{color:var(--accent);}
 .top-r{display:flex; align-items:center; gap:7px;}
@@ -1222,7 +1242,7 @@ const css = `
 .spin{animation:sp 1s linear infinite;} @keyframes sp{to{transform:rotate(360deg);}}
 .loading{padding:60px 0; color:var(--muted); font-size:15px;}
 
-.hero{margin-bottom:22px;}
+.hero{margin-bottom:24px;}
 .hero-meta{display:flex; align-items:center; gap:9px; font-size:12.5px; color:var(--muted); margin-bottom:12px;}
 .hero-meta .dot{width:3px; height:3px; border-radius:50%; background:currentColor; opacity:.5;}
 .cond{display:inline-flex; align-items:center; gap:5px;}
@@ -1411,6 +1431,21 @@ button:focus-visible, .slider:focus-visible{outline:2px solid var(--accent); out
 
 /* v4: outing planner, wardrobe, validated feedback */
 .campus-sub{font-size:10px;color:var(--muted);font-weight:500;margin-left:2px;}
+.planner-wrap{margin:2px 0 12px;}
+.planner-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:13px 15px;border:1px solid var(--line);border-radius:15px;background:rgba(255,255,255,.62);
+  color:var(--ink);cursor:pointer;font-family:'Instrument Sans',sans-serif;text-align:left;
+  box-shadow:0 1px 2px rgba(20,28,40,.025);}
+.planner-toggle:hover{background:var(--card);}
+.planner-toggle-main{display:flex;align-items:center;gap:10px;}
+.planner-toggle-main>svg{color:var(--accent);flex-shrink:0;}
+.planner-toggle-main>span{display:flex;flex-direction:column;gap:2px;}
+.planner-toggle-title{font-size:13px;font-weight:600;}
+.planner-toggle-sub{font-size:11.5px;color:var(--muted);}
+.planner-toggle>svg{color:var(--muted);transition:transform .2s ease;}
+.planner-toggle>svg.open{transform:rotate(180deg);}
+.planner-card{margin-top:8px;margin-bottom:0;animation:fade .2s ease;}
+.planner-card .outing-summary{margin-bottom:-2px;}
 .outing-grid{display:grid;grid-template-columns:1fr;gap:14px;}
 .field-label{display:block;font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
 .choice-row{display:flex;gap:6px;flex-wrap:wrap;}
