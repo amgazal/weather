@@ -354,8 +354,16 @@ export default function Layer() {
   const [toast, setToast] = useState(null);
   const [followed, setFollowed] = useState("yes");
   const [showModel, setShowModel] = useState(false);
+  const [now, setNow] = useState(() => new Date());
 
   useEffect(() => () => { mounted.current = false; }, []);
+
+  useEffect(() => {
+    const updateClock = () => setNow(new Date());
+    updateClock();
+    const id = window.setInterval(updateClock, 30000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const persist = useCallback(async (next) => {
     await storageSet(MODEL_KEY, JSON.stringify(next));
@@ -460,19 +468,41 @@ export default function Layer() {
 
   useEffect(() => { loadWeather(); }, [loadWeather]);
 
-  useEffect(() => {
-    Object.values(BACKGROUNDS).forEach((src) => {
-      const image = new Image();
-      image.src = src;
-    });
-  }, []);
+  const outingStart = useMemo(
+    () => new Date(now.getTime() + startOffset * 60 * 60 * 1000),
+    [now, startOffset]
+  );
+
+  const outingEnd = useMemo(
+    () => new Date(outingStart.getTime() + duration * 60 * 1000),
+    [outingStart, duration]
+  );
 
   const plan = useMemo(() => {
     if (!wx?.hourly?.time?.length) return null;
-    const targetMs = Date.now() + startOffset * 60 * 60 * 1000;
-    const index = getClosestHourlyIndex(wx.hourly.time, targetMs);
-    return conditionWindow(wx.hourly, index, duration);
-  }, [wx, startOffset, duration]);
+    const index = getClosestHourlyIndex(wx.hourly.time, outingStart.getTime());
+    const windowPlan = conditionWindow(wx.hourly, index, duration);
+
+    if (startOffset === 0 && wx.current) {
+      const apparentValues = [wx.current.apparent, ...windowPlan.apparent].filter(Number.isFinite);
+      return {
+        ...windowPlan,
+        depart: {
+          ...windowPlan.depart,
+          actual: wx.current.actual,
+          apparent: wx.current.apparent,
+          wind: wx.current.wind,
+          precip: wx.current.precip,
+          code: wx.current.code,
+          time: now.toISOString(),
+        },
+        minApparent: Math.round(Math.min(...apparentValues)),
+        maxApparent: Math.round(Math.max(...apparentValues)),
+      };
+    }
+
+    return windowPlan;
+  }, [wx, outingStart, duration, startOffset, now]);
 
   const result = useMemo(() => {
     if (!plan) return null;
@@ -579,11 +609,13 @@ export default function Layer() {
   const ConditionIcon = cond.Icon;
   const liveWeatherCode = wx?.current?.code ?? plan.depart.code ?? 3;
   const scene = scenicByCode(liveWeatherCode);
-  const todayText = plan ? humanDate(plan.depart.time) : humanDate(new Date());
-  const timeText = plan ? formatTime(plan.depart.time) : formatTime(new Date());
+  const todayText = humanDate(now);
+  const timeText = formatTime(now);
   const accent = result.band.accent;
-  const conf = confidence(model);
-  const planningSummary = `${startOffset === 0 ? "Leaving now" : `Leaving ${formatTime(new Date(Date.now() + startOffset * 60 * 60 * 1000))}`} • ${DURATIONS.find((d) => d.minutes === duration)?.label || `${duration} min`} outside${cycling ? " • Cycling" : ""}`;
+  const ratingCount = model.history.length;
+  const learningProgress = Math.min(95, Math.round((ratingCount / (ratingCount + 4)) * 100));
+  const learningLabel = ratingCount === 0 ? "Starting profile" : `${learningProgress}% learned`;
+  const planningSummary = `${startOffset === 0 ? "Leaving now" : `Leaving ${formatTime(outingStart)}`} • ${DURATIONS.find((d) => d.minutes === duration)?.label || `${duration} min`} outside${cycling ? " • Cycling" : ""}`;
 
   return (
     <div
@@ -648,7 +680,7 @@ export default function Layer() {
                   <div className="chips">
                     {START_OFFSETS.map((offset) => (
                       <button key={offset} className={`chip ${startOffset === offset ? "on" : ""}`} onClick={() => setStartOffset(offset)}>
-                        {offset === 0 ? "Now" : formatTime(new Date(Date.now() + offset * 60 * 60 * 1000))}
+                        {offset === 0 ? "Now" : formatTime(new Date(now.getTime() + offset * 60 * 60 * 1000))}
                       </button>
                     ))}
                   </div>
@@ -669,7 +701,7 @@ export default function Layer() {
               </div>
             )}
             <div className="planner-summary">
-              <span><Clock3 size={14} strokeWidth={2.2} /> {plan ? `${formatTime(plan.depart.time)}–${formatTime(wx.hourly.time[plan.endIndex])}` : "--"}</span>
+              <span><Clock3 size={14} strokeWidth={2.2} /> {`${formatTime(outingStart)}–${formatTime(outingEnd)}`}</span>
               <span>Feels {result?.rangeText || "--"}</span>
             </div>
           </aside>
@@ -781,39 +813,57 @@ export default function Layer() {
           </section>
 
           <section className="card glass main-card calibration-card">
-            <div className="card-head">
-              <h2 className="card-h">Your calibration</h2>
-              <span className="conf">{conf}% confident</span>
+            <div className="card-head calibration-head">
+              <div>
+                <h2 className="card-h">Personalization</h2>
+                <p className="calibration-copy">Layer learns how weather feels to you from the feedback you choose to share.</p>
+              </div>
+              <span className="conf">{learningLabel}</span>
             </div>
+
+            <div className="personalization-summary">
+              <span>{ratingCount === 0 ? "Based on your setup answers" : `${ratingCount} rating${ratingCount === 1 ? "" : "s"}`}</span>
+              <span>Saved on this device</span>
+            </div>
+
             {metric ? (
               <div className="metric">
                 <div className="metric-main">
                   <span className="metric-v">{metric.now}%</span>
-                  <span className="metric-k">calls you rated “just right” over your last {Math.min(10, metric.n)}</span>
+                  <span className="metric-k">of your recent recommendations were rated “just right”</span>
                 </div>
                 {metric.then !== null && metric.now !== null && metric.now !== metric.then && (
-                  <div className={`delta ${metric.now > metric.then ? "up" : ""}`}><TrendingUp size={13} strokeWidth={2.4} /> {metric.now > metric.then ? "+" : ""}{metric.now - metric.then} pts since you started</div>
+                  <div className={`delta ${metric.now > metric.then ? "up" : ""}`}><TrendingUp size={13} strokeWidth={2.4} /> {metric.now > metric.then ? "+" : ""}{metric.now - metric.then} points since you started</div>
                 )}
                 <div className="spark">{metric.spark.map((h, i) => <span key={i} className={`sp ${h.outcome}`} />)}</div>
               </div>
             ) : (
-              <p className="empty">Rate a few days and your accuracy trend will show up here.</p>
+              <p className="empty">Rate a few outings and Layer will begin showing your accuracy trend.</p>
             )}
-            <div className="regimes">
-              {[ ["cold","Cold days"], ["mild","Mild days"], ["warm","Warm days"] ].map(([k,label]) => {
-                const off = model.regime[k].off;
-                const pct = ((clamp(off, -CLAMP, CLAMP) + CLAMP) / (CLAMP * 2)) * 100;
-                return (
-                  <div key={k} className="reg">
-                    <span className="reg-l">{label}</span>
-                    <span className="reg-track"><span className="reg-mid" /><span className="reg-dot" style={{ left: `${pct}%` }} /></span>
-                    <span className="reg-v">{off > 0 ? "+" : ""}{off.toFixed(1)}°</span>
-                  </div>
-                );
-              })}
-            </div>
-            <button className="link-btn learn" onClick={() => setShowModel((v) => !v)}>How this learns <ChevronDown size={14} className={showModel ? "open" : ""} /></button>
-            {showModel && <div className="explain">Your feedback trains three temperature offsets — cold, mild, and warm days — and separately learns whether wind, wetness, or sun affect you more than average. If you did not follow the recommendation, the app logs the outcome but does not retrain from it.</div>}
+
+            <button className="link-btn learn" onClick={() => setShowModel((v) => !v)}>
+              {showModel ? "Hide learning details" : "View learning details"}
+              <ChevronDown size={14} className={showModel ? "open" : ""} />
+            </button>
+
+            {showModel && (
+              <div className="learning-details">
+                <div className="regimes">
+                  {[ ["cold","Cold days"], ["mild","Mild days"], ["warm","Warm days"] ].map(([k,label]) => {
+                    const off = model.regime[k].off;
+                    const pct = ((clamp(off, -CLAMP, CLAMP) + CLAMP) / (CLAMP * 2)) * 100;
+                    return (
+                      <div key={k} className="reg">
+                        <span className="reg-l">{label}</span>
+                        <span className="reg-track"><span className="reg-mid" /><span className="reg-dot" style={{ left: `${pct}%` }} /></span>
+                        <span className="reg-v">{off > 0 ? "+" : ""}{off.toFixed(1)}°</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="explain">Layer learns separate adjustments for cold, mild, and warm days. It can also learn whether wind, wetness, or sun affects you more than average. Feedback only changes the model when you say you followed the recommendation.</div>
+              </div>
+            )}
           </section>
         </main>
       </div>
@@ -1058,6 +1108,16 @@ const css = `
 .sp { width: 18px; height: 18px; border-radius: 4px; background: rgba(17,32,51,.09); }
 .sp.right { background: #6FB558; } .sp.cold { background: #7FB6DD; } .sp.warm { background: #E9B93F; }
 .empty { margin: 0 0 18px; color:#62728A; }
+.calibration-head { align-items: flex-start; }
+.calibration-copy { margin: 8px 0 0; color:#62728A; line-height:1.45; max-width:560px; }
+.personalization-summary {
+  display:flex; flex-wrap:wrap; gap:10px; margin: 0 0 18px;
+}
+.personalization-summary span {
+  padding:8px 11px; border-radius:999px; background:#F3F6FA; color:#607088; font-size:13px; font-weight:600;
+}
+.learning-details { margin-top:14px; padding:16px; border-radius:18px; background:#F4F7FB; }
+.learning-details .explain { margin-top:16px; background:white; }
 .regimes { display:grid; gap: 12px; }
 .reg { display:flex; gap: 12px; align-items:center; }
 .reg-l { width: 84px; color:#69788F; font-size: 14px; }

@@ -43,3 +43,11 @@ On screens below 980px, the interface now renders in this order:
 5. Comfort threats, feedback, and calibration
 
 This prevents the clothing/activity cards from appearing above the main weather information on phones.
+
+
+## Current-time and personalization update
+
+- The header now shows the device's live local time and updates every 30 seconds.
+- “Leaving now” displays the actual current-to-end time window instead of rounded hourly forecast timestamps.
+- The app uses current Open-Meteo conditions for an outing beginning now, while still using hourly data for the outing range.
+- Personalization is explained briefly by default; technical cold/mild/warm adjustments are available under “View learning details.”
