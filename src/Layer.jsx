@@ -3,7 +3,7 @@ import {
   Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudFog, CloudSun,
   Wind, Zap, Snowflake, Droplets, Check, Flame, MapPin, RefreshCw,
   Umbrella, ChevronDown, Footprints, Timer, Car, TrendingUp, X, ArrowRight,
-  Bike, Clock3, AlertTriangle, UserRound
+  Bike, Clock3, AlertTriangle, UserRound, CircleHelp
 } from "lucide-react";
 
 const CAMPUS = {
@@ -244,7 +244,9 @@ function conditionWindow(hourly, startIndex, durationMinutes) {
     },
     minApparent: Math.round(Math.min(...apparent)),
     maxApparent: Math.round(Math.max(...apparent)),
+    endApparent: Math.round(apparent[apparent.length - 1]),
     maxPrecip: Math.round(Math.max(...precip)),
+    endPrecip: Math.round(precip[precip.length - 1] ?? 0),
   };
 }
 
@@ -354,6 +356,7 @@ export default function Layer() {
   const [toast, setToast] = useState(null);
   const [followed, setFollowed] = useState("yes");
   const [showModel, setShowModel] = useState(false);
+  const [showWhy, setShowWhy] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => () => { mounted.current = false; }, []);
@@ -519,19 +522,56 @@ export default function Layer() {
     const effective = Math.round(eff);
     const band = bandFor(effective);
     const threats = threatsFor({ effective, wind: plan.depart.wind + (cycling ? 6 : 0), cond, precip: plan.depart.precip });
+    const personalShift = Math.round(eff - base);
+    const tempDelta = Math.round(plan.endApparent - plan.depart.apparent);
+    const laterConditions = plan.codes.slice(1).map(decodeWeather);
+    const snowSoon = !cond.snow && laterConditions.some((condition) => condition.snow);
+    const rainSoon = !cond.wet && !snowSoon && plan.maxPrecip >= 45;
+
+    const whyLines = [];
+    if (personalShift !== 0) {
+      whyLines.push(`The official feels-like reading is ${base}°, and your profile adjusts it to ${effective}°.`);
+    } else {
+      whyLines.push(`The official feels-like reading is ${base}° for this outing.`);
+    }
+
+    if (activity === "waiting") {
+      whyLines.push("Standing still produces less body heat, so the recommendation runs warmer.");
+    } else if (activity === "walking") {
+      whyLines.push("Walking adds some body heat, so the recommendation avoids unnecessary layers.");
+    } else {
+      whyLines.push("This is a short dash, so the recommendation prioritizes quick comfort over extra layers.");
+    }
+
+    if (cycling) {
+      whyLines.push("Cycling increases wind exposure, so the outer layer matters more.");
+    } else if (plan.depart.wind >= 12) {
+      whyLines.push(`Wind is around ${plan.depart.wind} mph, which can make exposed areas feel cooler.`);
+    } else if (cond.wet || plan.depart.precip >= 30) {
+      whyLines.push("Wet conditions increase heat loss, so a water-resistant layer is more useful.");
+    } else if (cond.clear && base >= 72) {
+      whyLines.push("Direct sun can add warmth, especially during a longer walk.");
+    } else if (duration >= 60) {
+      whyLines.push(`The recommendation covers about ${duration === 60 ? "an hour" : `${duration / 60} hours`} outside.`);
+    }
+
     return {
       effective,
       band,
       cond,
       threats,
       extras: extrasFor(threats, cond),
-      personalShift: Math.round(eff - base),
+      personalShift,
       rangeText: `${plan.minApparent}°–${plan.maxApparent}°`,
-      warnChange: Math.abs(plan.maxApparent - plan.minApparent) >= 8,
-      rainSoon: !cond.wet && plan.maxPrecip >= 45,
+      tempDelta,
+      significantTempChange: Math.abs(tempDelta) >= 6,
+      rainSoon,
+      snowSoon,
+      peakPrecip: plan.maxPrecip,
+      whyLines: whyLines.slice(0, 3),
       cycling,
     };
-  }, [plan, model, activity, cycling]);
+  }, [plan, model, activity, cycling, duration]);
 
   const metric = useMemo(() => {
     const usable = model.history.filter((h) => h.followed !== "no");
@@ -669,12 +709,12 @@ export default function Layer() {
           <aside className="planner glass card compact-planner planner-card">
             <div className="planner-head">
               <h2>Plan another outing</h2>
-              <button className="link-btn" onClick={() => setPlanOpen((v) => !v)}>
+              <button className="link-btn" aria-expanded={planOpen} aria-controls="outing-planner-controls" onClick={() => setPlanOpen((v) => !v)}>
                 {planOpen ? "Hide" : "Show"} <ChevronDown size={15} className={planOpen ? "open" : ""} />
               </button>
             </div>
             {planOpen && (
-              <div className="planner-body">
+              <div id="outing-planner-controls" className="planner-body">
                 <div className="plan-block">
                   <span className="mini-l">Leaving</span>
                   <div className="chips">
@@ -721,6 +761,26 @@ export default function Layer() {
                 </li>
               ))}
             </ul>
+
+            <button
+              className="why-toggle"
+              type="button"
+              aria-expanded={showWhy}
+              aria-controls="why-outfit-panel"
+              onClick={() => setShowWhy((value) => !value)}
+            >
+              <span><CircleHelp size={16} strokeWidth={2.2} /> Why this outfit?</span>
+              <ChevronDown size={16} className={showWhy ? "open" : ""} />
+            </button>
+
+            {showWhy && (
+              <div id="why-outfit-panel" className="why-panel">
+                <ul>
+                  {result.whyLines.map((line) => <li key={line}>{line}</li>)}
+                </ul>
+              </div>
+            )}
+
             {result?.extras?.length > 0 && (
               <div className="tipbar">
                 {result.extras.map((e, i) => {
@@ -729,11 +789,17 @@ export default function Layer() {
                 })}
               </div>
             )}
-            {(result?.warnChange || result?.rainSoon || result?.cycling) && (
-              <div className="warnbar">
-                {result.warnChange && <span><AlertTriangle size={14} strokeWidth={2.4} /> Conditions shift through this outing.</span>}
-                {result.rainSoon && <span><Umbrella size={14} strokeWidth={2.4} /> Rain becomes more likely later.</span>}
-                {result.cycling && <span><Bike size={14} strokeWidth={2.4} /> Expect stronger wind exposure.</span>}
+            {(result.significantTempChange || result.rainSoon || result.snowSoon || result.cycling) && (
+              <div className="warnbar" role="status" aria-live="polite">
+                {result.significantTempChange && (
+                  <span>
+                    <AlertTriangle size={14} strokeWidth={2.4} />
+                    It may feel {Math.abs(result.tempDelta)}° {result.tempDelta < 0 ? "colder" : "warmer"} by {formatTime(outingEnd)}.
+                  </span>
+                )}
+                {result.snowSoon && <span><Snowflake size={14} strokeWidth={2.4} /> Snow may begin before you return.</span>}
+                {result.rainSoon && <span><Umbrella size={14} strokeWidth={2.4} /> Rain risk rises to about {result.peakPrecip}% before you return.</span>}
+                {result.cycling && <span><Bike size={14} strokeWidth={2.4} /> Cycling adds stronger wind exposure.</span>}
               </div>
             )}
           </section>
@@ -741,7 +807,7 @@ export default function Layer() {
           <section className="card glass main-card activity-card">
             <div className="card-head inline-head">
               <h2 className="card-h">What’s the plan?</h2>
-              <button className="plan-link" onClick={() => setPlanOpen((v) => !v)}>
+              <button className="plan-link" aria-expanded={planOpen} aria-controls="outing-planner-controls" onClick={() => setPlanOpen((v) => !v)}>
                 More planning options <ChevronDown size={14} className={planOpen ? "open" : ""} />
               </button>
             </div>
@@ -841,13 +907,13 @@ export default function Layer() {
               <p className="empty">Rate a few outings and Layer will begin showing your accuracy trend.</p>
             )}
 
-            <button className="link-btn learn" onClick={() => setShowModel((v) => !v)}>
+            <button className="link-btn learn" aria-expanded={showModel} aria-controls="learning-details-panel" onClick={() => setShowModel((v) => !v)}>
               {showModel ? "Hide learning details" : "View learning details"}
               <ChevronDown size={14} className={showModel ? "open" : ""} />
             </button>
 
             {showModel && (
-              <div className="learning-details">
+              <div id="learning-details-panel" className="learning-details">
                 <div className="regimes">
                   {[ ["cold","Cold days"], ["mild","Mild days"], ["warm","Warm days"] ].map(([k,label]) => {
                     const off = model.regime[k].off;
@@ -1052,6 +1118,36 @@ const css = `
 .wear-name { font-size: 22px; font-weight: 600; }
 .wear-note { font-size: 15px; color: var(--muted-dark); }
 .wear-arrow { color: #8A97AA; transform: rotate(-90deg); }
+.why-toggle {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 4px;
+  padding: 13px 2px 4px;
+  border: 0;
+  border-top: 1px solid rgba(17,32,51,.08);
+  background: transparent;
+  color: #52637B;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 700;
+  text-align: left;
+}
+.why-toggle > span { display: inline-flex; align-items: center; gap: 9px; }
+.why-toggle svg { color: var(--accent); }
+.why-toggle .open { transform: rotate(180deg); }
+.why-panel {
+  margin-top: 10px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #F4F7FB;
+  color: #56667E;
+  line-height: 1.48;
+}
+.why-panel ul { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.why-panel li::marker { color: var(--accent); }
 .tipbar {
   margin: 10px -26px -24px; padding: 16px 22px; display:grid; gap: 10px;
   background: linear-gradient(180deg, rgba(248,243,232,1) 0%, rgba(249,245,236,.96) 100%); border-top: 1px solid rgba(227, 206, 158, .45);
@@ -1060,6 +1156,7 @@ const css = `
 .tip svg { color: var(--accent); flex-shrink: 0; }
 .warnbar { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 12px; color: #5f6f85; font-size: 14px; }
 .warnbar span { display: inline-flex; align-items: center; gap: 8px; background:#F7F8FB; padding: 10px 12px; border-radius: 12px; }
+.warnbar svg { color: var(--accent); flex-shrink: 0; }
 .acts { display:flex; gap: 14px; }
 .act {
   flex: 1; text-align: left; display:flex; flex-direction: column; gap: 6px; padding: 20px; border-radius: 24px; border: none;
@@ -1072,11 +1169,23 @@ const css = `
 .act-h { color: var(--muted-dark); font-size: 13px; }
 .scale { display:flex; gap: 18px; font-family:'DM Mono', monospace; color: var(--muted-dark); font-size: 11px; text-transform: uppercase; }
 .threats { display:grid; gap: 16px; }
-.threat { display:flex; align-items:center; gap: 18px; }
-.th-l { min-width: 130px; font-size: 18px; font-weight: 500; display:flex; gap: 10px; align-items:center; }
-.th-l svg { color: #5D6C84; }
-.meter { display:flex; gap: 3px; flex:1; }
-.seg { flex: 1; height: 9px; border-radius: 9px; background: rgba(17,32,51,.08); }
+.threat {
+  display:grid;
+  grid-template-columns: minmax(110px, 130px) minmax(0, 1fr);
+  align-items:center;
+  gap: 18px;
+  width: 100%;
+}
+.th-l { min-width: 0; font-size: 18px; font-weight: 500; display:flex; gap: 10px; align-items:center; }
+.th-l svg { color: #5D6C84; flex-shrink: 0; }
+.meter {
+  display:grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+.seg { width: 100%; height: 9px; border-radius: 9px; background: rgba(17,32,51,.08); }
 .lv-0 .seg.fill { background: rgba(17,32,51,.16); }
 .lv-1 .seg.fill { background: #93C86A; }
 .lv-2 .seg.fill { background: #E9B34C; }
@@ -1179,6 +1288,47 @@ const css = `
   to { transform: rotate(360deg); }
 }
 
+button, [role="button"], input, label {
+  -webkit-tap-highlight-color: transparent;
+}
+button:focus-visible,
+input:focus-visible,
+label:has(input:focus-visible) {
+  outline: 3px solid rgba(255, 197, 84, .95);
+  outline-offset: 3px;
+}
+.round-btn,
+.link-btn,
+.plan-link,
+.chip,
+.mini-chip,
+.act,
+.fb,
+.blame-b,
+.why-toggle {
+  touch-action: manipulation;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+  .scene-image { transform: none; }
+}
+
+@media (prefers-contrast: more) {
+  .weather-clear .backdrop,
+  .weather-cloudy .backdrop,
+  .weather-rain .backdrop,
+  .weather-snow .backdrop {
+    background: linear-gradient(180deg, rgba(3,10,20,.48) 0%, rgba(3,10,20,.62) 45%, rgba(3,10,20,.82) 100%);
+  }
+  .glass { background: rgba(255,255,255,.96); }
+}
+
 @media (max-width: 980px) {
   .content-grid { grid-template-columns: 1fr; }
   .hero { order: 1; padding-right: 0; }
@@ -1211,13 +1361,21 @@ const css = `
   .shift { margin-left: 0; margin-bottom: 8px; padding: 9px 12px; }
   .hero-foot { margin-top: 12px; font-size: 13px; }
   .card { border-radius: 24px; padding: 18px; }
+  .why-panel { padding: 13px 14px; font-size: 14px; }
+  .warnbar { display: grid; gap: 8px; }
+  .warnbar span { width: 100%; }
   .tipbar { margin-left: -18px; margin-right: -18px; margin-bottom: -18px; }
   .wear-name, .th-l { font-size: 18px; }
   .wear-emoji { width: 42px; height: 42px; font-size: 22px; }
   .acts, .fb-row { flex-direction: column; }
   .scale { gap: 10px; font-size: 10px; }
-  .threat { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .threat {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 10px;
+  }
   .th-l { min-width: 0; }
+  .meter { width: 100%; min-height: 9px; }
   .follow-line, .planner-head, .card-head { align-items: flex-start; }
   .ob-opts-row { grid-template-columns: 1fr; }
 }
